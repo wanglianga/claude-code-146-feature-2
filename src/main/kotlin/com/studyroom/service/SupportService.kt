@@ -18,7 +18,9 @@ data class TicketEvidence(
     val booking: Booking,
     val refunds: List<Refund>,
     val complaint: Complaint?,
-    val incident: Incident?
+    val incident: Incident?,
+    /** 邻座噪音案件（工单由噪音投诉生成时存在，含巡查/处置/延时券信息） */
+    val noiseCase: NoiseComplaintCase? = null
 )
 
 data class TicketDecision(
@@ -37,6 +39,7 @@ class SupportService(
     private val refundRepo: RefundRepository,
     private val complaintRepo: ComplaintRepository,
     private val incidentRepo: IncidentRepository,
+    private val noiseCaseRepo: NoiseComplaintCaseRepository,
     private val billing: BillingService,
     private val tl: TimelineService,
     private val clock: TimeProvider
@@ -48,6 +51,7 @@ class SupportService(
         val complaint = ticket.complaintNo?.let { complaintRepo.findByComplaintNo(it) }
         val incident = ticket.incidentNo?.let { incidentRepo.findByIncidentNo(it) }
             ?: complaint?.relatedIncidentNo?.let { incidentRepo.findByIncidentNo(it) }
+        val noiseCase = noiseCaseRepo.findByRelatedTicketNo(ticketNo)
         return TicketEvidence(
             ticket = ticket,
             accessLogs = accessLogRepo.findByBookingNoOrderByCreatedAtAsc(ticket.bookingNo),
@@ -56,7 +60,8 @@ class SupportService(
             booking = booking,
             refunds = refundRepo.findByBookingIdOrderByCreatedAtDesc(booking.id!!),
             complaint = complaint,
-            incident = incident
+            incident = incident,
+            noiseCase = noiseCase
         )
     }
 

@@ -2,6 +2,7 @@ package com.studyroom.web
 
 import com.studyroom.domain.DisputeCause
 import com.studyroom.repo.*
+import com.studyroom.service.NoiseComplaintService
 import com.studyroom.service.OperationsService
 import com.studyroom.service.PlanRuleAdjustment
 import com.studyroom.service.PriceAdjustment
@@ -12,12 +13,13 @@ import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
 
-@Tag(name = "运营端", description = "上座率/延时率/投诉率/设备故障指标，价格、座位布局、包月规则调整")
+@Tag(name = "运营端", description = "上座率/延时率/投诉率/设备故障指标，价格、座位布局、包月规则调整，噪音高发区域诊断")
 @RestController
 @RequestMapping("/api/ops")
 class OperationsController(
     private val ops: OperationsService,
-    private val supportTicketRepo: SupportTicketRepository
+    private val supportTicketRepo: SupportTicketRepository,
+    private val noise: NoiseComplaintService
 ) {
     @Operation(summary = "门店运营指标与争议根因分布")
     @GetMapping("/stores/{storeId}/metrics")
@@ -60,4 +62,26 @@ class OperationsController(
             "privilegeAbuseTickets" to tickets.filter { it.cause == DisputeCause.PRIVILEGE_ABUSE }.map { it.ticketNo }
         )
     }
+
+    @Operation(
+        summary = "区域噪音高发诊断",
+        description = "按区域聚合已成立噪音投诉：SEAT_LAYOUT_ISSUE=多名不同用户涉案且累犯率低（布局/隔音问题）；REMINDER_INEFFECTIVE=被警告后再犯率高（管理提醒无效）；同时返回最近治理措施及其后新增案件数。"
+    )
+    @GetMapping("/stores/{storeId}/noise-zones")
+    fun noiseZones(
+        @PathVariable storeId: Long,
+        @RequestParam from: Instant,
+        @RequestParam to: Instant
+    ): ZoneNoiseStatsView = Views.of(noise.zoneStats(storeId, from, to))
+
+    @Operation(
+        summary = "高发区域治理留痕（调整分区/加强静音提示）",
+        description = "记录运营措施与当时诊断；实际分区调整请配合 POST /api/ops/stores/{id}/seats/{seatId} 完成。再次查看区域诊断时会给出措施后新增案件数，判断是布局问题还是提醒无效。"
+    )
+    @PostMapping("/stores/{storeId}/noise-zones/review")
+    fun reviewNoiseZone(
+        @PathVariable storeId: Long,
+        @RequestBody @Valid req: ZoneNoiseReviewRequest
+    ): ZoneNoiseReviewView =
+        Views.of(noise.reviewZone(storeId, req.zone, req.action, req.note, req.from, req.to))
 }

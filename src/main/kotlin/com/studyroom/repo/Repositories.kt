@@ -155,3 +155,26 @@ interface SupportTicketRepository : JpaRepository<SupportTicket, Long> {
     fun findByStoreIdOrderByCreatedAtDesc(storeId: Long): List<SupportTicket>
     fun countByStoreIdAndCauseAndCreatedAtBetween(storeId: Long, cause: DisputeCause, from: Instant, to: Instant): Long
 }
+
+interface NoiseComplaintCaseRepository : JpaRepository<NoiseComplaintCase, Long> {
+    fun findByCaseNo(caseNo: String): NoiseComplaintCase?
+    fun findByStoreIdOrderByReceivedAtDesc(storeId: Long): List<NoiseComplaintCase>
+    fun findByStoreIdAndZoneAndReceivedAtBetween(
+        storeId: Long, zone: String, from: Instant, to: Instant
+    ): List<NoiseComplaintCase>
+    fun findByStoreIdAndReceivedAtBetween(storeId: Long, from: Instant, to: Instant): List<NoiseComplaintCase>
+    fun findByRespondentIdAndSubstantiatedTrueOrderByReceivedAtAsc(userId: Long): List<NoiseComplaintCase>
+    fun findByRelatedTicketNo(ticketNo: String): NoiseComplaintCase?
+}
+
+interface DelayVoucherRepository : JpaRepository<DelayVoucher, Long> {
+    fun findByVoucherNo(voucherNo: String): DelayVoucher?
+    fun findByOwnerIdOrderByIssuedAtDesc(userId: Long): List<DelayVoucher>
+    fun findByBookingNoOrderByIssuedAtDesc(bookingNo: String): List<DelayVoucher>
+}
+
+interface ZoneNoiseReviewRepository : JpaRepository<ZoneNoiseReview, Long> {
+    fun findByReviewNo(reviewNo: String): ZoneNoiseReview?
+    fun findByStoreIdAndZoneOrderByCreatedAtDesc(storeId: Long, zone: String): List<ZoneNoiseReview>
+    fun findByStoreIdOrderByCreatedAtDesc(storeId: Long): List<ZoneNoiseReview>
+}

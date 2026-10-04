@@ -4,6 +4,8 @@ import com.studyroom.domain.*
 import com.studyroom.service.CheckoutSettlement
 import com.studyroom.service.StoreMetrics
 import com.studyroom.service.TicketEvidence
+import com.studyroom.service.ZoneNoiseStat
+import com.studyroom.service.ZoneNoiseStats
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -63,6 +65,45 @@ data class ComplaintRequest(
 )
 
 data class ResolveComplaintRequest(val resolution: String, val rejected: Boolean = false)
+
+/** 邻座噪音投诉受理：服务接收时间由系统记录，只需提供在场预约号与是否已自行提醒 */
+data class NoiseComplaintRequest(
+    val complainantBookingNo: String,
+    val description: String,
+    val alreadyReminded: Boolean = false,
+    /** 被投诉预约号；同区域仅一名其他在场用户时可省略（系统自动定位） */
+    val respondentBookingNo: String? = null
+)
+
+data class NoisePatrolRequest(
+    val result: com.studyroom.domain.NoisePatrolResult,
+    val note: String? = null,
+    val staffUserId: Long? = null,
+    /** 巡查现场补录/指认被投诉订单 */
+    val respondentBookingNo: String? = null
+)
+
+/**
+ * 店员处置。决策按“换电话区意愿 → 是否接受提醒 → 是否多次违规”顺序进行：
+ * 愿意换座则忽略提醒字段；两者都拒绝且历史多次违规才终止预约。
+ */
+data class NoiseEnforceRequest(
+    val willingToMovePhoneZone: Boolean = false,
+    val acceptStaffWarning: Boolean = false,
+    val voucherMinutes: Int = 30,
+    val note: String? = null,
+    val staffUserId: Long? = null
+)
+
+data class NoiseVoucherRedeemRequest(val bookingNo: String)
+
+data class ZoneNoiseReviewRequest(
+    val zone: String,
+    val action: com.studyroom.domain.ZoneReviewAction,
+    val note: String,
+    val from: Instant? = null,
+    val to: Instant? = null
+)
 
 data class AppealRequest(val text: String)
 
@@ -212,7 +253,99 @@ data class EvidenceView(
     val sensor: SensorView?,
     val refunds: List<RefundView>,
     val complaint: ComplaintView?,
-    val incident: IncidentView?
+    val incident: IncidentView?,
+    /** 邻座噪音案件（仅当工单由噪音投诉产生时存在） */
+    val noiseCase: NoiseCaseView? = null
+)
+
+data class NoiseCaseView(
+    val caseNo: String,
+    val storeId: Long,
+    val complainantUserId: Long,
+    val respondentUserId: Long?,
+    val complainantBookingNo: String,
+    val respondentBookingNo: String?,
+    val zone: String,
+    val complainantSeatCode: String?,
+    val respondentSeatCode: String?,
+    val receivedAt: Instant,
+    val alreadyReminded: Boolean,
+    val description: String,
+    val patrolResult: com.studyroom.domain.NoisePatrolResult?,
+    val patrolledBy: Long?,
+    val patrolNote: String?,
+    val patrolledAt: Instant?,
+    val willingToMovePhoneZone: Boolean?,
+    val acceptStaffWarning: Boolean?,
+    val priorViolationCount: Int,
+    val enforcementAction: com.studyroom.domain.NoiseEnforcementAction?,
+    val targetSeatCode: String?,
+    val enforcementNote: String?,
+    val enforcedAt: Instant?,
+    val terminatedRefundSummary: String?,
+    val voucherNo: String?,
+    val relatedComplaintNo: String?,
+    val relatedTicketNo: String?,
+    val status: com.studyroom.domain.NoiseCaseStatus,
+    val substantiated: Boolean,
+    val resolvedAt: Instant?,
+    val resolution: String?
+)
+
+data class DelayVoucherView(
+    val voucherNo: String,
+    val ownerUserId: Long,
+    val storeId: Long,
+    val sourceCaseNo: String,
+    /** 绑定的原订单号 */
+    val bookingNo: String,
+    val minutes: Int,
+    val status: com.studyroom.domain.DelayVoucherStatus,
+    val issuedAt: Instant,
+    val redeemedAt: Instant?,
+    val redeemedBookingNo: String?,
+    val note: String?
+)
+
+data class ZoneNoiseReviewView(
+    val reviewNo: String,
+    val storeId: Long,
+    val zone: String,
+    val action: com.studyroom.domain.ZoneReviewAction,
+    val windowFrom: Instant,
+    val windowTo: Instant,
+    val caseCount: Int,
+    val diagnosis: com.studyroom.domain.ZoneNoiseDiagnosis,
+    val note: String,
+    val createdAt: Instant
+)
+
+data class ZoneNoiseStatView(
+    val zone: String,
+    val cases: Int,
+    val distinctRespondents: Int,
+    val repeatOffenderCases: Int,
+    val warnings: Int,
+    val movedToPhoneZone: Int,
+    val terminated: Int,
+    val repeatRate: Double,
+    val layoutSignal: Boolean,
+    val reminderSignal: Boolean,
+    val frequent: Boolean,
+    val diagnosis: com.studyroom.domain.ZoneNoiseDiagnosis,
+    val latestReviewAction: com.studyroom.domain.ZoneReviewAction?,
+    val latestReviewAt: Instant?,
+    val latestReviewDiagnosis: com.studyroom.domain.ZoneNoiseDiagnosis?,
+    val casesAfterLatestReview: Int?
+)
+
+data class ZoneNoiseStatsView(
+    val storeId: Long,
+    val from: Instant,
+    val to: Instant,
+    val frequentThreshold: Int,
+    val totalSubstantiatedCases: Int,
+    val zones: List<ZoneNoiseStatView>
 )
 
 object Views {
@@ -269,10 +402,41 @@ object Views {
         m.disputesByCause
     )
     fun of(r: SeatSensorReading) = SensorView(r.seat.id!!, r.occupied, r.occupiedByBookingNo, r.updatedAt)
+    fun of(c: NoiseComplaintCase) = NoiseCaseView(
+        c.caseNo, c.store.id!!, c.complainant.id!!, c.respondent?.id,
+        c.complainantBookingNo, c.respondentBookingNo,
+        c.zone, c.complainantSeatCode, c.respondentSeatCode,
+        c.receivedAt, c.alreadyReminded, c.description,
+        c.patrolResult, c.patrolledBy, c.patrolNote, c.patrolledAt,
+        c.willingToMovePhoneZone, c.acceptStaffWarning, c.priorViolationCount,
+        c.enforcementAction, c.targetSeatCode, c.enforcementNote, c.enforcedAt,
+        c.terminatedRefundSummary, c.voucherNo, c.relatedComplaintNo, c.relatedTicketNo,
+        c.status, c.substantiated, c.resolvedAt, c.resolution
+    )
+    fun of(v: DelayVoucher) = DelayVoucherView(
+        v.voucherNo, v.owner.id!!, v.store.id!!, v.sourceCaseNo,
+        v.bookingNo, v.minutes, v.status, v.issuedAt,
+        v.redeemedAt, v.redeemedBookingNo, v.note
+    )
+    fun of(r: ZoneNoiseReview) = ZoneNoiseReviewView(
+        r.reviewNo, r.store.id!!, r.zone, r.action,
+        r.windowFrom, r.windowTo, r.caseCount, r.diagnosis, r.note, r.createdAt
+    )
+    fun of(s: ZoneNoiseStat) = ZoneNoiseStatView(
+        s.zone, s.cases, s.distinctRespondents, s.repeatOffenderCases,
+        s.warnings, s.movedToPhoneZone, s.terminated, s.repeatRate,
+        s.layoutSignal, s.reminderSignal, s.frequent, s.diagnosis,
+        s.latestReviewAction, s.latestReviewAt, s.latestReviewDiagnosis, s.casesAfterLatestReview
+    )
+    fun of(s: ZoneNoiseStats) = ZoneNoiseStatsView(
+        s.storeId, s.from, s.to, s.frequentThreshold, s.totalSubstantiatedCases,
+        s.zones.map { of(it) }
+    )
     fun of(e: TicketEvidence) = EvidenceView(
         of(e.ticket), of(e.booking),
         e.accessLogs.map { of(it) }, e.timeline.map { of(it) },
         e.sensor?.let { of(it) }, e.refunds.map { of(it) },
-        e.complaint?.let { of(it) }, e.incident?.let { of(it) }
+        e.complaint?.let { of(it) }, e.incident?.let { of(it) },
+        e.noiseCase?.let { of(it) }
     )
 }

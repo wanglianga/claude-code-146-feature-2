@@ -72,6 +72,59 @@ enum class IncidentStatus { OPEN, RESOLVED }
 enum class ComplaintCategory { NOISE_NEIGHBOR, SEAT_OCCUPIED, EQUIPMENT_ENV, OTHER }
 enum class ComplaintStatus { OPEN, RESOLVED, REJECTED }
 
+/** 邻座噪音投诉案件状态 */
+enum class NoiseCaseStatus {
+    /** 已受理，待店员巡查 */
+    OPEN,
+    /** 店员巡查确认（含违规者已离场），处置/补偿已记录 */
+    CONFIRMED,
+    /** 店员巡查未发现噪音，投诉不成立 */
+    REJECTED
+}
+
+/** 店员现场巡查结论 */
+enum class NoisePatrolResult {
+    /** 外放噪音属实，违规者仍在场 */
+    SUBSTANTIATED,
+    /** 到场未发现噪音，投诉不成立 */
+    UNFOUNDED,
+    /** 违规者已停止/离场，投诉按成立记录但不再现场处置 */
+    OFFENDER_LEFT
+}
+
+/** 噪音违规处置动作（订单不会在投诉受理时立即结束，处置依决策树产生） */
+enum class NoiseEnforcementAction {
+    /** 警告：违规者接受店员提醒，订单继续 */
+    WARN,
+    /** 换到电话区：违规者愿意换座，订单保留并改派电话区座位 */
+    MOVE_TO_PHONE_ZONE,
+    /** 终止违规用户预约：拒不接受提醒且已多次违规，强制离场结算 */
+    TERMINATE_BOOKING
+}
+
+/** 延时券状态 */
+enum class DelayVoucherStatus { ISSUED, REDEEMED, EXPIRED }
+
+/** 区域噪音高发诊断：帮助运营区分“布局问题”与“提醒无效” */
+enum class ZoneNoiseDiagnosis {
+    /** 样本不足（窗口内投诉少于阈值） */
+    INSUFFICIENT,
+    /** 座位布局/隔音问题：投诉来自多名不同用户且累犯率低 */
+    SEAT_LAYOUT_ISSUE,
+    /** 管理提醒无效：被警告/提醒后的违规者再次案发率高 */
+    REMINDER_INEFFECTIVE,
+    /** 两类信号同时存在，需组合治理 */
+    MIXED
+}
+
+/** 运营针对高发区域的治理动作（留痕，便于下次投诉时评估措施有效性） */
+enum class ZoneReviewAction {
+    /** 调整座位分区（如加装隔断、改电话区/缓冲带） */
+    LAYOUT_ADJUST,
+    /** 加强静音提示（标识、广播、加密巡查） */
+    SILENCE_REMINDER
+}
+
 /** 争议根因归类，供运营端筛选 */
 enum class DisputeCause {
     /** 设备/门店设施故障（含停电、空调、门禁） */
