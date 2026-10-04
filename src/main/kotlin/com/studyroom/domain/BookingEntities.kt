@@ -72,6 +72,8 @@ class Booking(
     var relatedIncidentNo: String? = null,
     /** 若本预约是迟到顺延碰撞中被换座的一方，记录原座位 */
     var originalSeatId: Long? = null,
+    /** 因邻座噪音投诉被店员移至电话区时，记录原座位（区别于碰撞自动换座） */
+    var noiseMovedFromSeatId: Long? = null,
 
     @Column(nullable = false) var createdAt: Instant = Instant.now(),
     @Version @Column(nullable = false) var version: Long = 0,

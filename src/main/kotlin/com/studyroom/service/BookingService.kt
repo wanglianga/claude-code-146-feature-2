@@ -31,6 +31,7 @@ class BookingService(
     private val storeRepo: StoreRepository,
     private val seatRepo: SeatRepository,
     private val planRepo: MembershipPlanRepository,
+    private val voucherRepo: ExtensionVoucherRepository,
     private val billing: BillingService,
     private val timeline: TimelineService,
     private val clock: TimeProvider
@@ -177,9 +178,12 @@ class BookingService(
      * - 后续无人预约：直接批准并计费；
      * - 下一位用户已支付但未进场：批准，但记录碰撞，下一位进场时自动换座+补偿；
      * - 下一位用户已经在场：拒绝，避免侵占。
+     *
+     * 传入 [voucherNo] 时使用噪音投诉补偿的延时券抵扣，本次延时免费；
+     * 延时券与订单状态在同一事务内更新。
      */
     @Transactional
-    fun extend(bookingNo: String, minutes: Long): Booking {
+    fun extend(bookingNo: String, minutes: Long, voucherNo: String? = null): Booking {
         if (minutes <= 0) throw BizException("BAD_MINUTES", "延时分钟数必须大于 0")
         val b = mustGet(bookingNo)
         if (b.status != BookingStatus.IN_PROGRESS && b.status != BookingStatus.CONFIRMED) {
@@ -197,15 +201,36 @@ class BookingService(
         }
         val waiting = blockers.filter { it.status == BookingStatus.CONFIRMED }
 
-        val fee = billing.extensionFee(seat, b.store, minutes)
-        billing.charge(b, ChargeType.EXTENSION_FEE, fee, "临时延时 $minutes 分钟")
-        b.paidAmount = b.paidAmount.add(fee)
+        val voucher = voucherNo?.let { no ->
+            val v = voucherRepo.findByVoucherNo(no) ?: throw NotFoundException("延时券不存在")
+            if (v.owner.id != b.user.id) throw BizException("VOUCHER_NOT_OWNED", "延时券不属于当前用户")
+            if (v.status != VoucherStatus.ISSUED) throw BizException("VOUCHER_NOT_AVAILABLE", "延时券状态 ${v.status}，不可使用")
+            if (v.sourceBookingNo != b.bookingNo) {
+                throw BizException("VOUCHER_BOUND_TO_OTHER_BOOKING", "该延时券与原订单 ${v.sourceBookingNo} 绑定，仅可用于该订单的延时")
+            }
+            if (v.minutes != minutes) {
+                throw BizException("VOUCHER_MINUTES_MISMATCH", "该延时券面额为 ${v.minutes} 分钟，须一次性核销")
+            }
+            v
+        }
+
+        if (voucher != null) {
+            voucher.status = VoucherStatus.REDEEMED
+            voucher.redeemedAt = clock.now()
+            voucher.redeemedOnBookingNo = b.bookingNo
+        } else {
+            val fee = billing.extensionFee(seat, b.store, minutes)
+            billing.charge(b, ChargeType.EXTENSION_FEE, fee, "临时延时 $minutes 分钟")
+            b.paidAmount = b.paidAmount.add(fee)
+        }
         b.extendedEndTime = newEnd
         b.extended = true
 
         timeline.record(
-            "EXTENSION_APPROVED", b.store.id, b.bookingNo, "USER:${b.user.id}",
-            "延时至 $newEnd，加收 $fee 元" +
+            if (voucher != null) "EXTENSION_APPROVED_WITH_VOUCHER" else "EXTENSION_APPROVED",
+            b.store.id, b.bookingNo, "USER:${b.user.id}",
+            (if (voucher != null) "延时券 ${voucher.voucherNo} 抵扣，延时至 $newEnd，免收延时费"
+             else "延时至 $newEnd") +
                 if (waiting.isNotEmpty()) "；碰撞预警：影响后续订单 ${waiting.joinToString { it.bookingNo }}" else ""
         )
         waiting.forEach { next ->

@@ -26,7 +26,9 @@ enum class BookingStatus {
     /** 开场前取消 / 全退后关闭 */
     CANCELLED,
     /** 超时未到，计为爽约 */
-    NO_SHOW
+    NO_SHOW,
+    /** 因噪音违规等被店员终止（未消费部分按规则结算） */
+    TERMINATED
 }
 
 /** 账目方向：应收 / 退还（押金抵扣等） */
@@ -71,6 +73,54 @@ enum class IncidentStatus { OPEN, RESOLVED }
 
 enum class ComplaintCategory { NOISE_NEIGHBOR, SEAT_OCCUPIED, EQUIPMENT_ENV, OTHER }
 enum class ComplaintStatus { OPEN, RESOLVED, REJECTED }
+
+/** 噪音投诉处理状态：受理 → 店员巡查确认 → 处置中 → 已处置 */
+enum class NoiseComplaintStatus {
+    /** 已受理，等待店员巡查 */
+    RECEIVED,
+    /** 店员巡查完成，违规成立，等待对被投诉人处置 */
+    CONFIRMED,
+    /** 巡查未发现噪音（投诉不成立） */
+    UNFOUNDED,
+    /** 处置完成（警告/换电话区/终止） */
+    HANDLED
+}
+
+/** 店员巡查结论 */
+enum class PatrolResult {
+    /** 确实听到外放网课声等噪音，违规成立 */
+    NOISE_CONFIRMED,
+    /** 到场未发现噪音，投诉不成立 */
+    NOISE_NOT_FOUND
+}
+
+/** 噪音违规处置动作 */
+enum class NoiseActionType {
+    /** 口头/书面警告，订单继续 */
+    WARN,
+    /** 移至电话区，原订单继续不结束 */
+    MOVE_TO_PHONE_ZONE,
+    /** 终止违规用户预约（多次违规等严重情形） */
+    TERMINATE_BOOKING
+}
+
+/** 延时券状态 */
+enum class VoucherStatus {
+    /** 已发放，未使用 */
+    ISSUED,
+    /** 已用于一次延时 */
+    REDEEMED,
+    /** 关联订单已结束，券逾期失效 */
+    EXPIRED
+}
+
+/** 运营对噪音高发区域采取的干预类型 */
+enum class ZoneInterventionType {
+    /** 加强静音提示（增派/张贴提示） */
+    REINFORCE_SILENCE_NOTICE,
+    /** 调整座位分区（如改为电话区/静音区重划） */
+    REZONE_LAYOUT
+}
 
 /** 争议根因归类，供运营端筛选 */
 enum class DisputeCause {

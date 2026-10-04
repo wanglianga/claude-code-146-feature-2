@@ -13,6 +13,8 @@ class AppUser(
     var idCardMasked: String? = null,
     /** 累计爽约次数，影响后续预约策略 */
     @Column(nullable = false) var noShowCount: Int = 0,
+    /** 累计噪音违规成立次数，决定再次违规时是否直接终止预约 */
+    @Column(nullable = false) var noiseViolationCount: Int = 0,
     @Enumerated(EnumType.STRING) @Column(nullable = false) var role: UserRole = UserRole.USER,
     @Column(nullable = false) var blacklisted: Boolean = false,
     @Column(nullable = false) var createdAt: Instant = Instant.now(),

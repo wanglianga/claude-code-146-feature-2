@@ -28,7 +28,7 @@ data class CreateBookingRequest(
     val silenceRuleAcknowledged: Boolean = false
 )
 
-data class ExtendRequest(val minutes: Long)
+data class ExtendRequest(val minutes: Long, val voucherNo: String? = null)
 
 data class EnterRequest(val userId: Long, val storeId: Long, val doorId: String? = null)
 
@@ -64,6 +64,100 @@ data class ComplaintRequest(
 
 data class ResolveComplaintRequest(val resolution: String, val rejected: Boolean = false)
 
+// ---------------- 邻座噪音投诉 ----------------
+
+data class NoiseComplaintRequest(
+    val complainantBookingNo: String,
+    val offenderBookingNo: String? = null,
+    val description: String,
+    /** 受理时登记：投诉前用户是否已提醒过邻座 */
+    val remindedBeforePatrol: Boolean = false
+)
+
+data class NoisePatrolRequest(
+    val staffId: Long? = null,
+    val result: PatrolResult,
+    val willingToMovePhoneZone: Boolean? = null,
+    val acceptsReminder: Boolean? = null,
+    val note: String? = null
+)
+
+data class NoiseActionRequest(
+    val action: NoiseActionType,
+    val staffId: Long? = null,
+    val note: String? = null,
+    val targetSeatId: Long? = null
+)
+
+data class ReinforceSilenceRequest(val zone: String, val note: String, val adminId: Long? = null)
+
+data class RezoneSeatRequest(val newZone: String, val note: String = "", val adminId: Long? = null)
+
+data class NoiseComplaintView(
+    val noiseNo: String,
+    val storeId: Long,
+    val complainantUserId: Long,
+    val complainantBookingNo: String,
+    val offenderUserId: Long,
+    val offenderBookingNo: String,
+    val seatCode: String,
+    val zone: String,
+    val receivedAt: Instant,
+    val staffPatrolled: Boolean,
+    val remindedBeforePatrol: Boolean,
+    val description: String,
+    val status: NoiseComplaintStatus,
+    val patrolResult: PatrolResult?,
+    val patrolAt: Instant?,
+    val patrolNote: String?,
+    val willingToMovePhoneZone: Boolean?,
+    val acceptsReminder: Boolean?,
+    val priorViolationCount: Int,
+    val violationCountAfter: Int,
+    val recommendedAction: NoiseActionType?,
+    val actionTaken: NoiseActionType?,
+    val actionAt: Instant?,
+    val actionNote: String?,
+    val movedToSeatCode: String?,
+    val relatedComplaintNo: String?,
+    val relatedTicketNo: String?,
+    val voucher: VoucherView?
+)
+
+data class VoucherView(
+    val voucherNo: String,
+    val ownerUserId: Long,
+    val storeId: Long,
+    val sourceBookingNo: String,
+    val sourceNoiseNo: String,
+    val minutes: Long,
+    val status: VoucherStatus,
+    val issuedAt: Instant,
+    val redeemedAt: Instant?,
+    val redeemedOnBookingNo: String?,
+    val note: String?
+)
+
+data class ZoneInterventionItemView(
+    val type: ZoneInterventionType,
+    val note: String,
+    val newZone: String?,
+    val createdAt: Instant
+)
+
+data class ZoneNoiseStatView(
+    val storeId: Long,
+    val zone: String,
+    val confirmedComplaints: Int,
+    val distinctOffenders: Int,
+    val complaintsBySeat: Map<String, Int>,
+    val actionsTaken: Map<String, Int>,
+    val interventions: List<ZoneInterventionItemView>,
+    val diagnosis: String,
+    val diagnosisReason: String,
+    val recommendedIntervention: String?
+)
+
 data class AppealRequest(val text: String)
 
 data class DecideTicketRequest(
@@ -90,7 +184,7 @@ data class ClockOverrideRequest(val time: Instant?)
 data class UserView(
     val id: Long, val phone: String, val name: String,
     val realNameVerified: Boolean, val role: UserRole,
-    val noShowCount: Int, val blacklisted: Boolean
+    val noShowCount: Int, val noiseViolationCount: Int, val blacklisted: Boolean
 )
 
 data class StoreView(
@@ -130,7 +224,7 @@ data class BookingView(
     val useLocker: Boolean, val silenceRuleAcknowledged: Boolean,
     val late: Boolean, val lateMinutes: Long,
     val lockerReturned: Boolean, val seatEquipmentOk: Boolean,
-    val relatedIncidentNo: String?, val originalSeatId: Long?
+    val relatedIncidentNo: String?, val originalSeatId: Long?, val noiseMovedFromSeatId: Long?
 )
 
 data class AccessLogView(
@@ -216,7 +310,7 @@ data class EvidenceView(
 )
 
 object Views {
-    fun of(u: AppUser) = UserView(u.id!!, u.phone, u.name, u.realNameVerified, u.role, u.noShowCount, u.blacklisted)
+    fun of(u: AppUser) = UserView(u.id!!, u.phone, u.name, u.realNameVerified, u.role, u.noShowCount, u.noiseViolationCount, u.blacklisted)
     fun of(s: Store) = StoreView(
         s.id!!, s.name, s.address, s.unattended, s.blackout,
         s.lateGraceMinutes, s.earlyEntryMinutes, s.priceMultiplier,
@@ -236,7 +330,7 @@ object Views {
         b.actualCheckIn, b.actualCheckOut,
         b.price, b.deposit, b.paidAmount, b.refundedAmount, b.extraChargedAmount, b.depositDeducted,
         b.useLocker, b.silenceRuleAcknowledged, b.late, b.lateMinutes,
-        b.lockerReturned, b.seatEquipmentOk, b.relatedIncidentNo, b.originalSeatId
+        b.lockerReturned, b.seatEquipmentOk, b.relatedIncidentNo, b.originalSeatId, b.noiseMovedFromSeatId
     )
     fun of(l: AccessLog) = AccessLogView(
         l.id!!, l.bookingNo, l.user.id!!, l.store.id!!, l.doorId,
@@ -260,6 +354,26 @@ object Views {
         t.ticketNo, t.store.id!!, t.user.id!!, t.bookingNo, t.cause, t.status,
         t.responsibility, t.title, t.description, t.userAppeal, t.staffNote,
         t.monitorEventNos, t.incidentNo, t.complaintNo, t.createdAt, t.resolvedAt
+    )
+    fun of(v: ExtensionVoucher) = VoucherView(
+        v.voucherNo, v.owner.id!!, v.store.id!!, v.sourceBookingNo, v.sourceNoiseNo,
+        v.minutes, v.status, v.issuedAt, v.redeemedAt, v.redeemedOnBookingNo, v.note
+    )
+    fun of(n: NoiseComplaint, recommend: NoiseActionType? = null) = NoiseComplaintView(
+        n.noiseNo, n.store.id!!, n.complainant.id!!,
+        n.complainantBookingNo, n.offender.id!!, n.offenderBookingNo,
+        n.seatCode, n.zone, n.receivedAt, n.staffPatrolled, n.remindedBeforePatrol,
+        n.description, n.status, n.patrolResult, n.patrolAt, n.patrolNote,
+        n.willingToMovePhoneZone, n.acceptsReminder,
+        n.priorViolationCount, n.violationCountAfter, recommend,
+        n.actionTaken, n.actionAt, n.actionNote, n.movedToSeatCode,
+        n.relatedComplaintNo, n.relatedTicketNo, n.voucher?.let { of(it) }
+    )
+    fun of(s: com.studyroom.service.ZoneNoiseStat) = ZoneNoiseStatView(
+        s.storeId, s.zone, s.confirmedComplaints, s.distinctOffenders,
+        s.complaintsBySeat, s.actionsTaken,
+        s.interventions.map { ZoneInterventionItemView(it.type, it.note, it.newZone, it.createdAt) },
+        s.diagnosis, s.diagnosisReason, s.recommendedIntervention
     )
     fun of(e: TimelineEvent) = TimelineEventView(e.id!!, e.eventType, e.occurredAt, e.storeId, e.bookingNo, e.actor, e.detail)
     fun of(s: CheckoutSettlement) = SettlementView(s.overtimeFee, s.earlyRefund, s.depositDeduction, s.depositReturned, s.note)

@@ -47,10 +47,10 @@ class BookingController(
     fun postpone(@PathVariable bookingNo: String, @RequestBody @Valid req: ExtendRequest): BookingView =
         Views.of(bookingService.postpone(bookingNo, req.minutes))
 
-    @Operation(summary = "临时延时（占用下一位用户座位时会产生碰撞预警/拒绝）")
+    @Operation(summary = "临时延时（可传 voucherNo 用噪音补偿延时券免费抵扣；占用下一座位会预警/拒绝）")
     @PostMapping("/{bookingNo}/extend")
     fun extend(@PathVariable bookingNo: String, @RequestBody @Valid req: ExtendRequest): BookingView =
-        Views.of(bookingService.extend(bookingNo, req.minutes))
+        Views.of(bookingService.extend(bookingNo, req.minutes, req.voucherNo))
 
     @Operation(summary = "预约详情")
     @GetMapping("/{bookingNo}")

@@ -155,3 +155,53 @@ interface SupportTicketRepository : JpaRepository<SupportTicket, Long> {
     fun findByStoreIdOrderByCreatedAtDesc(storeId: Long): List<SupportTicket>
     fun countByStoreIdAndCauseAndCreatedAtBetween(storeId: Long, cause: DisputeCause, from: Instant, to: Instant): Long
 }
+
+interface NoiseComplaintRepository : JpaRepository<NoiseComplaint, Long> {
+    fun findByNoiseNo(noiseNo: String): NoiseComplaint?
+    fun findByStoreIdOrderByReceivedAtDesc(storeId: Long): List<NoiseComplaint>
+
+    /** 某门店某分区在指定时间窗内成立（已确认/已处置）的噪音投诉 */
+    @Query(
+        """
+        select n from NoiseComplaint n
+        where n.store.id = :storeId and n.zone = :zone
+          and n.status in (com.studyroom.domain.NoiseComplaintStatus.CONFIRMED,
+                           com.studyroom.domain.NoiseComplaintStatus.HANDLED)
+          and n.receivedAt >= :from and n.receivedAt < :to
+        order by n.receivedAt
+        """
+    )
+    fun findConfirmedByZone(
+        @Param("storeId") storeId: Long,
+        @Param("zone") zone: String,
+        @Param("from") from: Instant,
+        @Param("to") to: Instant
+    ): List<NoiseComplaint>
+
+    @Query(
+        """
+        select n from NoiseComplaint n
+        where n.store.id = :storeId
+          and n.status in (com.studyroom.domain.NoiseComplaintStatus.CONFIRMED,
+                           com.studyroom.domain.NoiseComplaintStatus.HANDLED)
+          and n.receivedAt >= :from and n.receivedAt < :to
+        order by n.receivedAt
+        """
+    )
+    fun findConfirmedByStore(
+        @Param("storeId") storeId: Long,
+        @Param("from") from: Instant,
+        @Param("to") to: Instant
+    ): List<NoiseComplaint>
+}
+
+interface ExtensionVoucherRepository : JpaRepository<ExtensionVoucher, Long> {
+    fun findByVoucherNo(voucherNo: String): ExtensionVoucher?
+    fun findBySourceBookingNo(sourceBookingNo: String): List<ExtensionVoucher>
+    fun findByOwnerIdOrderByIssuedAtDesc(ownerId: Long): List<ExtensionVoucher>
+}
+
+interface ZoneSilenceNoticeRepository : JpaRepository<ZoneSilenceNotice, Long> {
+    fun findByStoreIdAndZoneOrderByCreatedAtDesc(storeId: Long, zone: String): List<ZoneSilenceNotice>
+    fun findByStoreIdOrderByCreatedAtDesc(storeId: Long): List<ZoneSilenceNotice>
+}

@@ -32,6 +32,7 @@ class AccessService(
     private val sensorRepo: SeatSensorRepository,
     private val incidentRepo: IncidentRepository,
     private val accessLogRepo: AccessLogRepository,
+    private val voucherRepo: ExtensionVoucherRepository,
     private val billing: BillingService,
     private val seatLocks: SeatLockManager,
     private val timeline: TimelineService,
@@ -303,6 +304,18 @@ class AccessService(
                 "ACCESS_EXIT_${mode.name}", store.id, booking.bookingNo, "USER:${user.id}",
                 "$detail；订单状态=${booking.status}"
             )
+
+            // 计时订单终结：与该订单绑定但尚未使用的噪音补偿延时券随之失效（包月单次离场权益仍有效，保留券）
+            if (booking.status == BookingStatus.COMPLETED) {
+                voucherRepo.findBySourceBookingNo(booking.bookingNo)
+                    .filter { it.status == VoucherStatus.ISSUED }
+                    .forEach {
+                        it.status = VoucherStatus.EXPIRED
+                        timeline.record("NOISE_VOUCHER_EXPIRED", store.id, booking.bookingNo, "SYSTEM",
+                            "订单结束，未使用延时券 ${it.voucherNo}（${it.minutes} 分钟）失效")
+                    }
+            }
+
             ExitResult(booking.bookingNo, seat.code, settlement, booking.status, detail)
         }
     }

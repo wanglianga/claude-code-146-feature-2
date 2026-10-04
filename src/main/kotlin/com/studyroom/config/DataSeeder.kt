@@ -58,6 +58,9 @@ class DataSeeder(
             seat(store1, "A02", SeatType.SINGLE, "10", zone = "静音区A", locker = true),
             seat(store1, "A03", SeatType.SINGLE, "10", zone = "静音区A"),
             seat(store1, "B01", SeatType.SINGLE, "12", zone = "轻音区B"),
+            // 电话区：噪音违规用户可移至此区继续外放/通话，不影响静音区
+            seat(store1, "P01", SeatType.SINGLE, "10", zone = "电话区"),
+            seat(store1, "P02", SeatType.SINGLE, "10", zone = "电话区"),
             seat(store1, "R01", SeatType.ROOM, "40", zone = "包间区", locker = true),
             seat(store1, "N01", SeatType.NIGHT, "39", zone = "夜间区")
         ).map {

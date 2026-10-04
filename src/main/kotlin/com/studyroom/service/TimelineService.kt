@@ -37,5 +37,7 @@ object BizNoGenerator {
     fun ticket(id: Long) = prefix("TK", id)
     fun complaint(id: Long) = prefix("CP", id)
     fun incident(id: Long) = prefix("IN", id)
+    fun noise(id: Long) = prefix("NC", id)
+    fun voucher(id: Long) = prefix("VC", id)
     fun monitor(seed: String): String = "MON-" + seed.uppercase().replace(Regex("[^A-Z0-9]"), "").takeLast(10)
 }
